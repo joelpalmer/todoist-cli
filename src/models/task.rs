@@ -1,18 +1,19 @@
-/// Represents a Todoist task (subset to start with)
-/// Mirrors Todoist API's `content` and `checked` properties.
-/// https://developer.todoist.com/api/v1/#tag/Tasks
+// src/models/task.rs
+/// Represents a Todoist task with minimal fields for local CRUD.
 #[derive(Clone)]
 pub struct Task {
-    pub title:String, // Task content (e.g., "Work on Todoist CLI")
-    pub checked:bool, // Completion status of the task
+    pub id: usize, // Unique ID for local tasks
+    pub title: String, // Task content (e.g., "Buy Milk")
+    pub checked: bool, // Completion status
 }
 
 impl Task {
-    /// Creates a new Task with the given title and completion status.
-    pub fn new(title:String, checked:bool) -> Task {
+    /// Creates a new task with the given ID, title, and completion status.
+    pub fn new(id: usize, title: &str, checked: bool) -> Self {
         Task {
+            id,
             title: title.to_string(),
-            checked
+            checked,
         }
     }
 }
