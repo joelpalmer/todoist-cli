@@ -50,7 +50,7 @@ fn render(f: &mut Frame, app: &mut App) {
         .collect::<Vec<_>>();
     let list = List::new(items)
         .block(Block::default()
-            .title(format!("Todoist CLI Task Manager [Mode: {}]", mode_str))
+            .title(format!("Todoist CLI [Mode: {}]", mode_str))
             .borders(Borders::ALL));
     f.render_stateful_widget(list, chunks[0], app.list_state());
 

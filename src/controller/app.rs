@@ -27,7 +27,7 @@ impl App {
         list_state.select(Some(0));
         App {
             tasks: vec![
-                Task::new(1, "Buy Milk", false),
+                Task::new(1, "Add storage", false),
                 Task::new(2, "Write Code", false),
                 Task::new(3, "Fix Bugs", true),
             ],
