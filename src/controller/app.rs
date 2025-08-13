@@ -1,4 +1,3 @@
-// src/controller/app.rs
 use crate::api::client::ApiClient;
 use crate::db::cache::Cache;
 use crate::models::task::Task;
@@ -15,11 +14,11 @@ pub enum Mode {
 
 /// Application state managing tasks and TUI mode.
 pub struct App {
-    tasks: Vec<Task>, // In-memory task list
-    next_id: usize, // Tracks next available local task ID
-    list_state: ListState, // Manages TUI list selection
-    mode: Mode, // Current TUI mode
-    pub input_buffer: String, // Buffer for task input in Insert mode
+    tasks: Vec<Task>,
+    next_id: usize,
+    list_state: ListState,
+    mode: Mode,
+    pub input_buffer: String,
     api_client: ApiClient,
     cache: Cache,
 }
@@ -131,7 +130,13 @@ impl App {
             return;
         }
         let i = match self.list_state.selected() {
-            Some(i) => if i == 0 { self.tasks.len() - 1 } else { i - 1 },
+            Some(i) => {
+                if i == 0 {
+                    self.tasks.len() - 1
+                } else {
+                    i - 1
+                }
+            }
             None => 0,
         };
         self.list_state.select(Some(i));

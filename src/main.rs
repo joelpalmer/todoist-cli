@@ -1,26 +1,25 @@
-// src/main.rs
-use ratatui::{
-    backend::CrosstermBackend,
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-    Terminal, Frame,
-};
+use crate::controller::app::{App, Mode};
+use crate::utils::error::AppResult;
+use clap::Parser;
 use crossterm::{
     event::{self, KeyCode, KeyEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use ratatui::{
+    backend::CrosstermBackend,
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    Frame, Terminal,
+};
 use std::io;
-use crate::utils::error::AppResult;
-use clap::Parser;
 
+mod api;
+mod cli;
+mod controller;
+mod db;
 mod models;
 mod utils;
-mod controller;
-mod cli;
-mod api;
-mod db;
 
-use controller::app::{App, Mode};
 use cli::commands::{Cli, Commands, process_command};
 
 /// Renders the TUI based on the app state.
@@ -39,27 +38,27 @@ fn render(f: &mut Frame, app: &mut App) {
         Mode::InsertEdit => "Insert (Edit)",
     };
     let selected = app.list_state().selected();
-    let items = app.tasks()
+    let items = app
+        .tasks()
         .iter()
         .enumerate()
         .map(|(i, task)| {
             let prefix = if Some(i) == selected { "> " } else { "  " };
-            let status = if task.is_completed { "[x]" } else { "[ ]" };
+            let status = if task.checked { "[x]" } else { "[ ]" };
             ListItem::new(format!("{} {} {}", prefix, status, task.title))
         })
         .collect::<Vec<_>>();
     let list = List::new(items)
-        .block(Block::default()
-            .title(format!("Todoist CLI Task Manager [Mode: {}]", mode_str))
-            .borders(Borders::ALL));
+        .block(
+            Block::default()
+                .title(format!("Todoist CLI Task Manager [Mode: {}]", mode_str))
+                .borders(Borders::ALL),
+        );
     f.render_stateful_widget(list, chunks[0], app.list_state());
 
     if matches!(app.mode(), Mode::InsertAdd | Mode::InsertEdit) {
-        let input_block = Block::default()
-            .title("Input")
-            .borders(Borders::ALL);
-        let input = Paragraph::new(app.input_buffer.as_str())
-            .block(input_block);
+        let input_block = Block::default().title("Input").borders(Borders::ALL);
+        let input = Paragraph::new(app.input_buffer.as_str()).block(input_block);
         f.set_cursor_position((
             chunks[1].x + 2 + app.input_buffer.len() as u16,
             chunks[1].y + 1,

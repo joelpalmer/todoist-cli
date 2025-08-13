@@ -1,4 +1,3 @@
-// src/api/client.rs
 use crate::models::task::Task;
 use crate::utils::error::AppResult;
 use reqwest::Client;
@@ -6,10 +5,26 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 #[derive(Deserialize)]
+struct TasksResponse {
+    results: Vec<TaskResponse>,
+}
+
+#[derive(Deserialize)]
 struct TaskResponse {
     id: String,
-    content: String,
-    is_completed: bool,
+    description: String, // Adjust to content if confirmed by curl
+    checked: bool,
+}
+
+#[derive(Deserialize)]
+struct CreatedTaskResponse {
+    // Wrapper for POST /tasks response, adjust based on actual structure
+    item: TaskResponse,
+}
+
+#[derive(Deserialize)]
+struct ErrorResponse {
+    error: String,
 }
 
 /// Todoist REST v1 API client.
@@ -34,18 +49,35 @@ impl ApiClient {
             .get("https://api.todoist.com/api/v1/tasks")
             .header("Authorization", format!("Bearer {}", self.token))
             .send()
-            .await?
-            .json::<Vec<TaskResponse>>()
             .await?;
 
-        let tasks = response
+        let status = response.status();
+        let raw_text = response.text().await?;
+
+        if !status.is_success() {
+            match serde_json::from_str::<ErrorResponse>(&raw_text) {
+                Ok(error_response) => {
+                    return Err(anyhow::anyhow!("API error: {}", error_response.error));
+                }
+                Err(_) => {
+                    return Err(anyhow::anyhow!("Non-success status {}: {}", status, raw_text));
+                }
+            }
+        }
+
+        let tasks_response: TasksResponse = serde_json::from_str(&raw_text).map_err(|e| {
+            anyhow::anyhow!("Failed to deserialize tasks: {}. Raw response: {}", e, raw_text)
+        })?;
+
+        let tasks = tasks_response
+            .results
             .into_iter()
             .enumerate()
             .map(|(i, item)| Task {
-                id: i + 1, // Assign local ID
+                id: i + 1,
                 todoist_id: item.id,
-                title: item.content,
-                is_completed: item.is_completed,
+                title: item.description,
+                checked: item.checked,
             })
             .collect();
         Ok(tasks)
@@ -58,28 +90,43 @@ impl ApiClient {
             .post("https://api.todoist.com/api/v1/tasks")
             .header("Authorization", format!("Bearer {}", self.token))
             .header("Content-Type", "application/json")
-            .json(&json!({"content": title}))
+            .json(&json!({ "description": title })) // Adjust to content if confirmed
             .send()
-            .await?
-            .json::<TaskResponse>()
             .await?;
+
+        let status = response.status();
+        let raw_text = response.text().await?;
+
+        if !status.is_success() {
+            match serde_json::from_str::<ErrorResponse>(&raw_text) {
+                Ok(error_response) => {
+                    return Err(anyhow::anyhow!("API error: {}", error_response.error));
+                }
+                Err(_) => {
+                    return Err(anyhow::anyhow!("Non-success status {}: {}", status, raw_text));
+                }
+            }
+        }
+
+        let created_response: CreatedTaskResponse = serde_json::from_str(&raw_text).map_err(|e| {
+            anyhow::anyhow!("Failed to deserialize created task: {}. Raw response: {}", e, raw_text)
+        })?;
 
         Ok(Task {
             id: 0, // Local ID set by caller
-            todoist_id: response.id,
-            title: response.content,
-            is_completed: response.is_completed,
+            todoist_id: created_response.item.id,
+            title: created_response.item.description,
+            checked: created_response.item.checked,
         })
     }
 
     /// Updates a task in Todoist.
     pub async fn update_task(&self, todoist_id: &str, title: &str) -> AppResult<()> {
-        self
-            .client
-            .patch(&format!("https://api.todoist.com/api/v1/tasks/{}", todoist_id))
+        self.client
+            .patch(format!("https://api.todoist.com/api/v1/tasks/{}", todoist_id))
             .header("Authorization", format!("Bearer {}", self.token))
             .header("Content-Type", "application/json")
-            .json(&json!({"content": title}))
+            .json(&json!({ "description": title })) // Adjust to content if confirmed
             .send()
             .await?;
         Ok(())
@@ -87,9 +134,8 @@ impl ApiClient {
 
     /// Deletes a task in Todoist.
     pub async fn delete_task(&self, todoist_id: &str) -> AppResult<()> {
-        self
-            .client
-            .delete(&format!("https://api.todoist.com/api/v1/tasks/{}", todoist_id))
+        self.client
+            .delete(format!("https://api.todoist.com/api/v1/tasks/{}", todoist_id))
             .header("Authorization", format!("Bearer {}", self.token))
             .send()
             .await?;
