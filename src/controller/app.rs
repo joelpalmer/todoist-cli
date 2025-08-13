@@ -1,4 +1,6 @@
 // src/controller/app.rs
+use crate::api::client::ApiClient;
+use crate::db::cache::Cache;
 use crate::models::task::Task;
 use crate::utils::error::AppResult;
 use ratatui::widgets::ListState;
@@ -7,63 +9,98 @@ use ratatui::widgets::ListState;
 #[derive(PartialEq)]
 pub enum Mode {
     Normal,
-    InsertAdd, // For adding new tasks
-    InsertEdit, // For editing existing tasks
+    InsertAdd,
+    InsertEdit,
 }
 
 /// Application state managing tasks and TUI mode.
 pub struct App {
     tasks: Vec<Task>, // In-memory task list
-    next_id: usize, // Tracks next available task ID
+    next_id: usize, // Tracks next available local task ID
     list_state: ListState, // Manages TUI list selection
     mode: Mode, // Current TUI mode
-    input_buffer: String, // Buffer for task input in Insert mode
+    pub input_buffer: String, // Buffer for task input in Insert mode
+    api_client: ApiClient,
+    cache: Cache,
 }
 
 impl App {
-    /// Initializes the app with hardcoded tasks.
-    pub fn new() -> Self {
-        let mut list_state = ListState::default();
-        list_state.select(Some(0));
-        App {
-            tasks: vec![
-                Task::new(1, "Add storage", false),
+    /// Initializes the app with API client and cache.
+    pub fn new(token: String) -> AppResult<Self> {
+        let cache = Cache::new()?;
+        let mut tasks = cache.load_tasks()?;
+        if tasks.is_empty() {
+            tasks = vec![
+                Task::new(1, "Buy Milk", false),
                 Task::new(2, "Write Code", false),
-                Task::new(3, "Fix Bugs", true),
-            ],
-            next_id: 4, // Next available ID
+                Task::new(3, "Fix Bugs", false),
+            ];
+        }
+        let mut list_state = ListState::default();
+        if !tasks.is_empty() {
+            list_state.select(Some(0));
+        }
+        let next_id = tasks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        Ok(App {
+            tasks,
+            next_id,
             list_state,
             mode: Mode::Normal,
             input_buffer: String::new(),
-        }
+            api_client: ApiClient::new(token),
+            cache,
+        })
     }
 
-    /// Adds a new task with the given title.
-    pub fn add_task(&mut self, title: &str) -> AppResult<()> {
-        if !title.trim().is_empty() {
-            self.tasks.push(Task::new(self.next_id, title.to_string().as_str(), false));
-            self.next_id += 1;
-            // Select the new task
-            self.list_state.select(Some(self.tasks.len() - 1));
+    /// Syncs tasks with the Todoist API and updates cache.
+    pub async fn sync_tasks(&mut self) -> AppResult<()> {
+        let api_tasks = self.api_client.fetch_tasks().await?;
+        let mut tasks = Vec::new();
+        for (i, mut task) in api_tasks.into_iter().enumerate() {
+            task.id = self.next_id + i;
+            tasks.push(task);
+        }
+        self.next_id += tasks.len();
+        self.tasks = tasks;
+        self.cache.save_tasks(&self.tasks)?;
+        if !self.tasks.is_empty() && self.list_state.selected().is_none() {
+            self.list_state.select(Some(0));
         }
         Ok(())
     }
 
-    /// Updates the title of the task with the given ID.
-    pub fn update_task(&mut self, id: usize, title: &str) -> AppResult<()> {
+    /// Adds a new task locally and to Todoist.
+    pub async fn add_task(&mut self, title: &str) -> AppResult<()> {
+        if !title.trim().is_empty() {
+            let mut task = self.api_client.add_task(title).await?;
+            task.id = self.next_id;
+            self.tasks.push(task);
+            self.next_id += 1;
+            self.list_state.select(Some(self.tasks.len() - 1));
+            self.cache.save_tasks(&self.tasks)?;
+        }
+        Ok(())
+    }
+
+    /// Updates a task locally and in Todoist.
+    pub async fn update_task(&mut self, id: usize, title: &str) -> AppResult<()> {
         if let Some(task) = self.tasks.iter_mut().find(|t| t.id == id) {
             if !title.trim().is_empty() {
+                self.api_client.update_task(&task.todoist_id, title).await?;
                 task.title = title.to_string();
+                self.cache.save_tasks(&self.tasks)?;
             }
         }
         Ok(())
     }
 
-    /// Deletes the task with the given ID.
-    pub fn delete_task(&mut self, id: usize) -> AppResult<()> {
+    /// Deletes a task locally and in Todoist.
+    pub async fn delete_task(&mut self, id: usize) -> AppResult<()> {
         if let Some(index) = self.tasks.iter().position(|t| t.id == id) {
+            let task = &self.tasks[index];
+            self.api_client.delete_task(&task.todoist_id).await?;
             self.tasks.remove(index);
-            // Adjust selection if needed
+            self.cache.save_tasks(&self.tasks)?;
             if self.tasks.is_empty() {
                 self.list_state.select(None);
             } else if index <= self.list_state.selected().unwrap_or(0) {
@@ -111,37 +148,32 @@ impl App {
         self.input_buffer.clear();
         if let Some(i) = self.list_state.selected() {
             if let Some(task) = self.tasks.get(i) {
-                self.input_buffer = task.title.clone(); // Pre-fill with current task title
+                self.input_buffer = task.title.clone();
             }
         }
         self.mode = Mode::InsertEdit;
     }
 
     /// Exits Insert mode, saving the input as a new or updated task.
-    pub fn exit_insert_mode(&mut self) -> AppResult<()> {
-        // Copy input_buffer to avoid borrowing self immutably
+    pub async fn exit_insert_mode(&mut self) -> AppResult<()> {
         let input = self.input_buffer.clone();
         if !input.trim().is_empty() {
             match self.mode {
                 Mode::InsertAdd => {
-                    // Always add a new task
-                    self.add_task(&input)?;
+                    self.add_task(&input).await?;
                 }
                 Mode::InsertEdit => {
                     if let Some(i) = self.list_state.selected() {
                         if let Some(task) = self.tasks.get(i) {
-                            // Update existing task
-                            self.update_task(task.id, &input)?;
+                            self.update_task(task.id, &input).await?;
                         } else {
-                            // Fallback to adding if selection is invalid
-                            self.add_task(&input)?;
+                            self.add_task(&input).await?;
                         }
                     } else {
-                        // Add new task if no selection
-                        self.add_task(&input)?;
+                        self.add_task(&input).await?;
                     }
                 }
-                Mode::Normal => {} // Should not happen
+                Mode::Normal => {}
             }
         }
         self.mode = Mode::Normal;
@@ -172,10 +204,5 @@ impl App {
     /// Gets the mutable list state.
     pub fn list_state(&mut self) -> &mut ListState {
         &mut self.list_state
-    }
-
-    /// Gets the input buffer.
-    pub fn input_buffer(&self) -> &String {
-        &self.input_buffer
     }
 }

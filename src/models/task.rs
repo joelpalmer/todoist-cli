@@ -5,29 +5,19 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Task {
     pub id: usize, // Local ID for TUI
-    pub todoist_id: Option<String>, // Tododist API ID (null for local-only tasks)
+    pub todoist_id: String, // Todoist API ID
     pub title: String, // Task content (e.g., "Buy Milk")
-    pub checked: bool, // Completion status
+    pub is_completed: bool, // Completion status
 }
 
 impl Task {
     /// Creates a new task with the given ID, title, and completion status.
-    pub fn new(id: usize, title: &str, checked: bool) -> Self {
+    pub fn new(id: usize, title: &str, is_completed: bool) -> Self {
         Task {
             id,
-            todoist_id: None,
+            todoist_id: "".to_string(),
             title: title.to_string(),
-            checked,
-        }
-    }
-
-    /// Creates a task from Todoist API data with a local ID.
-    pub fn from_api(id: usize, todoist_id: String, title: String, checked: bool) -> Self {
-        Task {
-            id,
-            todoist_id: Some(todoist_id),
-            title,
-            checked,
+            is_completed,
         }
     }
 }

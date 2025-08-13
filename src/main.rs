@@ -17,22 +17,22 @@ mod models;
 mod utils;
 mod controller;
 mod cli;
+mod api;
+mod db;
 
 use controller::app::{App, Mode};
 use cli::commands::{Cli, Commands, process_command};
 
 /// Renders the TUI based on the app state.
 fn render(f: &mut Frame, app: &mut App) {
-    // Split the screen into two areas: task list (top) and input (bottom)
     let chunks = ratatui::layout::Layout::default()
         .direction(ratatui::layout::Direction::Vertical)
         .constraints([
-            ratatui::layout::Constraint::Min(0), // Task list takes remaining space
-            ratatui::layout::Constraint::Length(3), // Input field is 3 lines high
+            ratatui::layout::Constraint::Min(0),
+            ratatui::layout::Constraint::Length(3),
         ])
         .split(f.size());
 
-    // Render task list
     let mode_str = match app.mode() {
         Mode::Normal => "Normal",
         Mode::InsertAdd => "Insert (Add)",
@@ -44,33 +44,32 @@ fn render(f: &mut Frame, app: &mut App) {
         .enumerate()
         .map(|(i, task)| {
             let prefix = if Some(i) == selected { "> " } else { "  " };
-            let status = if task.checked { "[x]" } else { "[ ]" };
+            let status = if task.is_completed { "[x]" } else { "[ ]" };
             ListItem::new(format!("{} {} {}", prefix, status, task.title))
         })
         .collect::<Vec<_>>();
     let list = List::new(items)
         .block(Block::default()
-            .title(format!("Todoist CLI [Mode: {}]", mode_str))
+            .title(format!("Todoist CLI Task Manager [Mode: {}]", mode_str))
             .borders(Borders::ALL));
     f.render_stateful_widget(list, chunks[0], app.list_state());
 
-    // Show input buffer in Insert modes
     if matches!(app.mode(), Mode::InsertAdd | Mode::InsertEdit) {
         let input_block = Block::default()
             .title("Input")
             .borders(Borders::ALL);
-        let input = Paragraph::new(app.input_buffer().as_str())
+        let input = Paragraph::new(app.input_buffer.as_str())
             .block(input_block);
-        f.set_cursor(
-            chunks[1].x + 2 + app.input_buffer().len() as u16, // Cursor at end of input text
-            chunks[1].y + 1, // Center vertically in input area
-        );
+        f.set_cursor_position((
+            chunks[1].x + 2 + app.input_buffer.len() as u16,
+            chunks[1].y + 1,
+        ));
         f.render_widget(input, chunks[1]);
     }
 }
 
 /// Runs the TUI application.
-fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> AppResult<()> {
+async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> AppResult<()> {
     loop {
         terminal.draw(|f| render(f, app))?;
 
@@ -84,18 +83,17 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App)
                         KeyCode::Char('i') => app.enter_insert_edit_mode(),
                         KeyCode::Char('a') => app.enter_insert_add_mode(),
                         KeyCode::Char('d') => {
-                            // Delete the selected task
                             if let Some(i) = app.list_state().selected() {
                                 if let Some(task) = app.tasks().get(i) {
-                                    app.delete_task(task.id)?;
+                                    app.delete_task(task.id).await?;
                                 }
                             }
                         }
                         _ => {}
                     },
                     Mode::InsertAdd | Mode::InsertEdit => match code {
-                        KeyCode::Enter => app.exit_insert_mode()?,
-                        KeyCode::Esc => app.exit_insert_mode()?,
+                        KeyCode::Enter => app.exit_insert_mode().await?,
+                        KeyCode::Esc => app.exit_insert_mode().await?,
                         KeyCode::Char(c) => app.handle_input(c),
                         KeyCode::Backspace => app.handle_backspace(),
                         _ => {}
@@ -107,28 +105,27 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App)
     Ok(())
 }
 
-fn main() -> AppResult<()> {
-    // Parse CLI arguments
+#[tokio::main]
+async fn main() -> AppResult<()> {
     let cli = Cli::parse();
-    let mut app = App::new();
+    let token = std::env::var("TODOIST_TOKEN").expect("TODOIST_TOKEN env var required");
+    let mut app = App::new(token)?;
 
-    // Process CLI command if provided
+    app.sync_tasks().await?;
+
     if let Some(command) = cli.command {
-        process_command(&mut app, &command)?;
+        process_command(&mut app, &command).await?;
         return Ok(());
     }
 
-    // Initialize terminal for TUI
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Run TUI
-    let result = run_app(&mut terminal, &mut app);
+    let result = run_app(&mut terminal, &mut app).await;
 
-    // Cleanup terminal
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     result

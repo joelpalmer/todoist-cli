@@ -1,6 +1,7 @@
 // src/cli/commands.rs
 use clap::{Parser, Subcommand};
 use crate::utils::error::AppResult;
+use crate::controller::app::App;
 
 /// CLI arguments for the Todoist CLI.
 #[derive(Parser)]
@@ -34,10 +35,10 @@ pub enum Commands {
 }
 
 /// Processes CLI commands and updates the app state.
-pub fn process_command(app: &mut crate::controller::app::App, command: &Commands) -> AppResult<()> {
+pub async fn process_command(app: &mut App, command: &Commands) -> AppResult<()> {
     match command {
-        Commands::Add { title } => app.add_task(title),
-        Commands::Update { id, title } => app.update_task(*id, title),
-        Commands::Delete { id } => app.delete_task(*id),
+        Commands::Add { title } => app.add_task(title).await,
+        Commands::Update { id, title } => app.update_task(*id, title).await,
+        Commands::Delete { id } => app.delete_task(*id).await,
     }
 }
