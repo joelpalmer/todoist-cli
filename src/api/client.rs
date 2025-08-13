@@ -12,14 +12,17 @@ struct TasksResponse {
 #[derive(Deserialize)]
 struct TaskResponse {
     id: String,
-    description: String, // Adjust to content if confirmed by curl
+    content: String,
     checked: bool,
 }
 
 #[derive(Deserialize)]
 struct CreatedTaskResponse {
-    // Wrapper for POST /tasks response, adjust based on actual structure
-    item: TaskResponse,
+    // Simplified to handle direct response or adjust based on curl output
+    #[serde(default)]
+    item: Option<TaskResponse>, // Optional item wrapper
+    #[serde(flatten)]
+    task: TaskResponse, // Fallback to direct task fields
 }
 
 #[derive(Deserialize)]
@@ -54,13 +57,24 @@ impl ApiClient {
         let status = response.status();
         let raw_text = response.text().await?;
 
+        println!("fetch_tasks - Status: {}, Raw Response: {}", status, raw_text); // Debug logging
+
         if !status.is_success() {
             match serde_json::from_str::<ErrorResponse>(&raw_text) {
                 Ok(error_response) => {
-                    return Err(anyhow::anyhow!("API error: {}", error_response.error));
+                    return Err(anyhow::anyhow!(
+                        "API error: {}. Raw response: {}",
+                        error_response.error,
+                        raw_text
+                    ));
                 }
                 Err(_) => {
-                    return Err(anyhow::anyhow!("Non-success status {}: {}", status, raw_text));
+                    return Err(anyhow::anyhow!(
+                        "Non-success status {}: {}. Raw response: {}",
+                        status,
+                        raw_text,
+                        raw_text
+                    ));
                 }
             }
         }
@@ -76,7 +90,7 @@ impl ApiClient {
             .map(|(i, item)| Task {
                 id: i + 1,
                 todoist_id: item.id,
-                title: item.description,
+                title: item.content,
                 checked: item.checked,
             })
             .collect();
@@ -90,20 +104,31 @@ impl ApiClient {
             .post("https://api.todoist.com/api/v1/tasks")
             .header("Authorization", format!("Bearer {}", self.token))
             .header("Content-Type", "application/json")
-            .json(&json!({ "description": title })) // Adjust to content if confirmed
+            .json(&json!({ "content": title }))
             .send()
             .await?;
 
         let status = response.status();
         let raw_text = response.text().await?;
 
+        println!("add_task - Status: {}, Raw Response: {}", status, raw_text); // Debug logging
+
         if !status.is_success() {
             match serde_json::from_str::<ErrorResponse>(&raw_text) {
                 Ok(error_response) => {
-                    return Err(anyhow::anyhow!("API error: {}", error_response.error));
+                    return Err(anyhow::anyhow!(
+                        "API error: {}. Raw response: {}",
+                        error_response.error,
+                        raw_text
+                    ));
                 }
                 Err(_) => {
-                    return Err(anyhow::anyhow!("Non-success status {}: {}", status, raw_text));
+                    return Err(anyhow::anyhow!(
+                        "Non-success status {}: {}. Raw response: {}",
+                        status,
+                        raw_text,
+                        raw_text
+                    ));
                 }
             }
         }
@@ -112,11 +137,12 @@ impl ApiClient {
             anyhow::anyhow!("Failed to deserialize created task: {}. Raw response: {}", e, raw_text)
         })?;
 
+        let task = created_response.item.unwrap_or(created_response.task);
         Ok(Task {
             id: 0, // Local ID set by caller
-            todoist_id: created_response.item.id,
-            title: created_response.item.description,
-            checked: created_response.item.checked,
+            todoist_id: task.id,
+            title: task.content,
+            checked: task.checked,
         })
     }
 
@@ -126,7 +152,7 @@ impl ApiClient {
             .patch(format!("https://api.todoist.com/api/v1/tasks/{}", todoist_id))
             .header("Authorization", format!("Bearer {}", self.token))
             .header("Content-Type", "application/json")
-            .json(&json!({ "description": title })) // Adjust to content if confirmed
+            .json(&json!({ "content": title }))
             .send()
             .await?;
         Ok(())
