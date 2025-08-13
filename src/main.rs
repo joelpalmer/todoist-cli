@@ -87,12 +87,27 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mu
                                     app.delete_task(task.id).await?;
                                 }
                             }
+                            // Force redraw after deletion
+                            terminal.clear()?;
                         }
                         _ => {}
                     },
                     Mode::InsertAdd | Mode::InsertEdit => match code {
-                        KeyCode::Enter => app.exit_insert_mode().await?,
-                        KeyCode::Esc => app.exit_insert_mode().await?,
+                        KeyCode::Enter => {
+                            app.exit_insert_mode().await?;
+                            // Compute new index before mutable borrow
+                            let new_index = if !app.tasks().is_empty() {
+                                Some(app.tasks().len() - 1)
+                            } else {
+                                None
+                            };
+                            app.list_state().select(new_index);
+                            terminal.clear()?;
+                        }
+                        KeyCode::Esc => {
+                            app.exit_insert_mode().await?;
+                            terminal.clear()?;
+                        }
                         KeyCode::Char(c) => app.handle_input(c),
                         KeyCode::Backspace => app.handle_backspace(),
                         _ => {}
