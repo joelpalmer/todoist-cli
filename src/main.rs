@@ -1,3 +1,4 @@
+// src/main.rs
 use crate::controller::app::{App, Mode};
 use crate::utils::error::AppResult;
 use clap::Parser;
@@ -88,6 +89,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mu
                                 }
                             }
                             // Force redraw after deletion
+                            terminal.clear()?;
+                        }
+                        KeyCode::Char('t') => {
+                            app.toggle_task().await?;
                             terminal.clear()?;
                         }
                         _ => {}

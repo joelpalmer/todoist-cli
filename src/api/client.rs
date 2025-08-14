@@ -18,11 +18,10 @@ struct TaskResponse {
 
 #[derive(Deserialize)]
 struct CreatedTaskResponse {
-    // Simplified to handle direct response or adjust based on curl output
     #[serde(default)]
-    item: Option<TaskResponse>, // Optional item wrapper
+    item: Option<TaskResponse>,
     #[serde(flatten)]
-    task: TaskResponse, // Fallback to direct task fields
+    task: TaskResponse,
 }
 
 #[derive(Deserialize)]
@@ -147,12 +146,12 @@ impl ApiClient {
     }
 
     /// Updates a task in Todoist.
-    pub async fn update_task(&self, todoist_id: &str, title: &str) -> AppResult<()> {
+    pub async fn update_task(&self, todoist_id: &str, title: &str, checked: bool) -> AppResult<()> {
         self.client
             .patch(format!("https://api.todoist.com/api/v1/tasks/{}", todoist_id))
             .header("Authorization", format!("Bearer {}", self.token))
             .header("Content-Type", "application/json")
-            .json(&json!({ "content": title }))
+            .json(&json!({ "content": title, "checked": checked }))
             .send()
             .await?;
         Ok(())

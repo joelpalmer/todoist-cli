@@ -1,3 +1,4 @@
+// src/controller/app.rs
 use crate::api::client::ApiClient;
 use crate::db::cache::Cache;
 use crate::models::task::Task;
@@ -82,11 +83,14 @@ impl App {
     }
 
     /// Updates a task locally and in Todoist.
-    pub async fn update_task(&mut self, id: usize, title: &str) -> AppResult<()> {
+    pub async fn update_task(&mut self, id: usize, title: &str, checked: bool) -> AppResult<()> {
         if let Some(task) = self.tasks.iter_mut().find(|t| t.id == id) {
             if !title.trim().is_empty() {
-                self.api_client.update_task(&task.todoist_id, title).await?;
+                self.api_client
+                    .update_task(&task.todoist_id, title, checked)
+                    .await?;
                 task.title = title.to_string();
+                task.checked = checked; // Update local checked status
                 self.cache.save_tasks(&self.tasks)?;
             }
         }
@@ -105,6 +109,21 @@ impl App {
             } else if index <= self.list_state.selected().unwrap_or(0) {
                 let new_index = self.list_state.selected().unwrap_or(1).saturating_sub(1);
                 self.list_state.select(Some(new_index));
+            }
+        }
+        Ok(())
+    }
+
+    /// Toggles the completion status of the selected task.
+    pub async fn toggle_task(&mut self) -> AppResult<()> {
+        if let Some(i) = self.list_state.selected() {
+            if let Some(task) = self.tasks.get_mut(i) {
+                let new_checked = !task.checked;
+                task.checked = new_checked;
+                self.api_client
+                    .update_task(&task.todoist_id, &task.title, new_checked)
+                    .await?; // Pass new_checked
+                self.cache.save_tasks(&self.tasks)?;
             }
         }
         Ok(())
@@ -170,7 +189,7 @@ impl App {
                 Mode::InsertEdit => {
                     if let Some(i) = self.list_state.selected() {
                         if let Some(task) = self.tasks.get(i) {
-                            self.update_task(task.id, &input).await?;
+                            self.update_task(task.id, &input, task.checked).await?;
                         } else {
                             self.add_task(&input).await?;
                         }

@@ -26,6 +26,8 @@ pub enum Commands {
         id: usize,
         /// New task title
         title: String,
+        /// Task completion status
+        checked: bool,
     },
     /// Deletes a task
     Delete {
@@ -38,7 +40,7 @@ pub enum Commands {
 pub async fn process_command(app: &mut App, command: &Commands) -> AppResult<()> {
     match command {
         Commands::Add { title } => app.add_task(title).await,
-        Commands::Update { id, title } => app.update_task(*id, title).await,
+        Commands::Update { id, title, checked } => app.update_task(*id, title, *checked).await,
         Commands::Delete { id } => app.delete_task(*id).await,
     }
 }
