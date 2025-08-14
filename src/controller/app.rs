@@ -70,6 +70,7 @@ impl App {
     }
 
     /// Adds a new task locally and to Todoist.
+    // todo: for add and update, allow for labels in TUI and API
     pub async fn add_task(&mut self, title: &str) -> AppResult<()> {
         if !title.trim().is_empty() {
             let mut task = self.api_client.add_task(title).await?;
@@ -116,6 +117,7 @@ impl App {
 
     /// Closes a task locally and in Todoist.
     // todo: Rename to close_task.
+    // todo: create a reopen_task method.
     pub async fn toggle_task(&mut self) -> AppResult<()> {
         if let Some(i) = self.list_state.selected() {
             if let Some(task) = self.tasks.get_mut(i) {
