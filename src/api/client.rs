@@ -166,4 +166,14 @@ impl ApiClient {
             .await?;
         Ok(())
     }
+    
+    /// Closes a task in Todoist.
+    pub async fn close_task(&self, todoist_id: &str) -> AppResult<()> {
+        self.client
+            .post(format!("https://api.todoist.com/api/v1/tasks/{}/close", todoist_id))
+            .header("Authorization", format!("Bearer {}", self.token))
+            .send()
+            .await?;
+        Ok(())
+    }
 }

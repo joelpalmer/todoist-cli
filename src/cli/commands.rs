@@ -36,6 +36,7 @@ pub enum Commands {
     },
 }
 
+// todo: Add Close Task command?
 /// Processes CLI commands and updates the app state.
 pub async fn process_command(app: &mut App, command: &Commands) -> AppResult<()> {
     match command {

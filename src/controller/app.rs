@@ -114,14 +114,15 @@ impl App {
         Ok(())
     }
 
-    /// Toggles the completion status of the selected task.
+    /// Closes a task locally and in Todoist.
+    // todo: Rename to close_task.
     pub async fn toggle_task(&mut self) -> AppResult<()> {
         if let Some(i) = self.list_state.selected() {
             if let Some(task) = self.tasks.get_mut(i) {
                 let new_checked = !task.checked;
                 task.checked = new_checked;
                 self.api_client
-                    .update_task(&task.todoist_id, &task.title, new_checked)
+                    .close_task(&task.todoist_id)
                     .await?; // Pass new_checked
                 self.cache.save_tasks(&self.tasks)?;
             }
