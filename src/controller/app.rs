@@ -1,4 +1,3 @@
-// src/controller/app.rs
 use crate::api::client::ApiClient;
 use crate::db::cache::Cache;
 use crate::models::task::Task;

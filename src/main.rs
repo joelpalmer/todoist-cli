@@ -1,4 +1,3 @@
-// src/main.rs
 use crate::controller::app::{App, Mode};
 use crate::utils::error::AppResult;
 use clap::Parser;
@@ -58,7 +57,7 @@ fn render(f: &mut Frame, app: &mut App) {
     f.render_stateful_widget(list, chunks[0], app.list_state());
 
     if matches!(app.mode(), Mode::InsertAdd | Mode::InsertEdit) {
-        let input_block = Block::default().title("Input").borders(Borders::ALL);
+        let input_block = Block::default().title("Title").borders(Borders::ALL);
         let input = Paragraph::new(app.input_buffer.as_str()).block(input_block);
         f.set_cursor_position((
             chunks[1].x + 2 + app.input_buffer.len() as u16,

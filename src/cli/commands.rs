@@ -1,4 +1,3 @@
-// src/cli/commands.rs
 use clap::{Parser, Subcommand};
 use crate::utils::error::AppResult;
 use crate::controller::app::App;
